@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-音频文件元数据编码转换工具
-将音频文件（MP3、FLAC、M4A等）的元数据从中文编码转换为UTF-8
+Audio Meta Fixer - 音频元数据编码修复工具
+将音频文件（MP3、FLAC、M4A等）的元数据从中文编码转换为UTF-8，解决音频播放器中文乱码问题
+
+Author: Claude (Anthropic)
+Version: 1.0.0
+License: MIT
 """
 
 import os
@@ -20,6 +24,11 @@ from mutagen.oggvorbis import OggVorbis
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, COMM, USLT
 from mutagen.id3 import ID3NoHeaderError
 import struct
+
+# 程序信息
+__version__ = "1.0.0"
+__author__ = "Claude (Anthropic)"
+__license__ = "MIT"
 
 # 配置日志
 logging.basicConfig(
@@ -1518,6 +1527,9 @@ class AudioMetadataConverter:
     def run(self):
         """运行转换过程"""
         logger.info("=" * 60)
+        logger.info(f"Audio Meta Fixer v{__version__}")
+        logger.info(f"作者: {__author__} | 许可证: {__license__}")
+        logger.info("-" * 60)
         logger.info(f"开始转换音频文件元数据编码")
         logger.info(f"目标目录: {self.target_dir}")
         mode_info = []
@@ -1570,14 +1582,16 @@ class AudioMetadataConverter:
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='音频文件元数据编码转换工具 - 将中文编码转换为UTF-8',
+        description='Audio Meta Fixer - 音频元数据编码修复工具，将中文编码转换为UTF-8',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  %(prog)s /path/to/music                    # 交互模式转换指定目录下的所有音频文件（默认）
-  %(prog)s /path/to/music --dry-run          # 测试模式，只显示将要转换的内容
-  %(prog)s /path/to/music --direct           # 直接模式，自动处理所有转换不询问用户
-  %(prog)s .                                 # 交互模式转换当前目录下的所有音频文件
+  audio_meta_fixer.py /path/to/music                    # 交互模式转换指定目录下的所有音频文件（默认）
+  audio_meta_fixer.py /path/to/music --dry-run          # 测试模式，只显示将要转换的内容
+  audio_meta_fixer.py /path/to/music --direct           # 直接模式，自动处理所有转换不询问用户
+  audio_meta_fixer.py .                                 # 交互模式转换当前目录下的所有音频文件
+
+Author: Claude (Anthropic) | Version: 1.0.0 | License: MIT
         """
     )
     
@@ -1596,6 +1610,12 @@ def main():
         '--direct',
         action='store_true',
         help='直接模式，自动处理所有转换不询问用户（默认为交互模式）'
+    )
+    
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'Audio Meta Fixer v{__version__} by {__author__}'
     )
     
     args = parser.parse_args()
