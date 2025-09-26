@@ -1,0 +1,2 @@
+mutagen>=1.47.0
+chardet>=5.2.0
