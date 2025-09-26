@@ -1,6 +1,4 @@
-# Audio Meta Fixer
-
-**Audio metadata encoding repair tool** - Convert audio file metadata from Chinese encodings (GBK, GB2312, Big5, etc.) to UTF-8 encoding, solving Chinese character display issues in audio players.
+# 音频文件元数据编码转换工具
 
 音频元数据编码修复工具 - 将音频文件（MP3、FLAC、M4A等）的元数据从中文编码（GBK、GB2312、Big5等）统一转换为UTF-8编码，解决音频播放器中文乱码问题。
 
@@ -107,26 +105,3 @@ python audio_meta_fixer.py ~/Music --dry-run --direct
 3. 程序会自动跳过已经是UTF-8编码的文件
 4. 智能检测并跳过损坏的元数据，避免错误转换
 5. 对于无法识别的文件格式，程序会记录警告信息并跳过
-
-## 版本信息
-
-**当前版本**: 1.0.0
-
-查看版本信息：
-```bash
-python audio_meta_fixer.py --version
-```
-
-## 作者
-
-**Claude (Anthropic)**
-
-这个项目由 Claude AI 助手开发，旨在解决中文音频元数据编码问题，提升音乐爱好者的聆听体验。
-
-## 贡献
-
-欢迎提交 Issues 和 Pull Requests 来改进这个项目！
-
-## 许可证
-
-本项目采用 [MIT License](LICENSE) 开源许可证。
