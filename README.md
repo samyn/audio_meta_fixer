@@ -189,6 +189,11 @@ python audio_meta_fixer.py --version
 
 这个项目由 Claude AI 助手开发，旨在解决中文音频元数据编码问题，提升音乐爱好者的聆听体验。
 
+**从前有个程序员**
+
+开过程的Blog。
+https://zxthecoder.com/2025/09/29/%e4%b8%80%e5%b0%8f%e6%97%b6%e7%94%a8claude-code%e6%89%93%e9%80%a0%e5%bc%80%e6%ba%90%e9%9f%b3%e4%b9%90%e5%85%83%e6%95%b0%e6%8d%ae%e4%bf%ae%e5%a4%8d%e5%b7%a5%e5%85%b7%ef%bc%88audio-meta-fixer%ef%bc%89/
+
 ## 贡献
 
 欢迎提交 Issues 和 Pull Requests 来改进这个项目！
