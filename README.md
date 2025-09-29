@@ -1,20 +1,20 @@
 # Audio Meta Fixer
 
-**Audio metadata encoding repair tool** - Convert audio file metadata from Chinese encodings (GBK, GB2312, Big5, etc.) to UTF-8 encoding, solving Chinese character display issues in audio players.
+**Audio metadata encoding repair tool** - Convert audio file metadata from Chinese encodings (GBK, GB2312, GB18030, Big5, Big5-HKSCS, CP936, CP950) to UTF-8 encoding, solving Chinese character display issues in audio players.
 
-音频元数据编码修复工具 - 将音频文件（MP3、FLAC、M4A等）的元数据从中文编码（GBK、GB2312、Big5等）统一转换为UTF-8编码，解决音频播放器中文乱码问题。
+音频元数据编码修复工具 - 将音频文件（MP3、FLAC、M4A、MP4、OGG、OGA、OPUS、WMA、APE、WAV）的元数据从中文编码（GBK、GB2312、GB18030、Big5、Big5-HKSCS、CP936、CP950）统一转换为UTF-8编码，解决音频播放器中文乱码问题。
 
 ## 功能特点
 
-- 🎵 **多格式支持**：MP3、FLAC、M4A、MP4、OGG、APE、WAV等
-- 🌏 **智能编码检测**：自动识别GBK、GB2312、GB18030、Big5、EUC-JP等编码
-- 🤖 **交互式修复**：默认交互模式，智能建议修复内容
-- 📁 **目录递归扫描**：自动处理所有子目录中的音频文件
-- 🔍 **测试模式**：支持dry-run模式，安全预览转换结果
-- 🎯 **损坏检测**：智能识别并处理部分损坏的元数据
-- 💾 **记忆功能**：记住用户选择，避免重复询问
-- 📊 **进度显示**：实时显示处理进度和统计信息
-- 🛡️ **安全可靠**：完整的错误处理和日志记录
+- 支持MP3、FLAC、M4A、MP4、OGG、OGA、OPUS、WMA、APE、WAV格式
+- 自动识别GBK、GB2312、GB18030、Big5、Big5-HKSCS、CP936、CP950、EUC-JP编码
+- 默认交互模式，智能建议修复内容
+- 支持处理单个文件或整个目录（包括子目录）
+- 支持dry-run模式，安全预览转换结果
+- 智能识别并处理部分损坏的元数据
+- 记住用户选择，避免重复询问
+- 实时显示处理进度和统计信息
+- 完整的错误处理和日志记录
 
 ## 快速开始
 
@@ -31,8 +31,15 @@ pip install -r requirements.txt
 
 3. **开始使用**
 ```bash
-# 交互模式修复音频元数据（推荐）
+# 交互模式修复目录下所有音频元数据（推荐）
 python audio_meta_fixer.py /path/to/your/music
+
+# 交互模式修复单个音频文件
+python audio_meta_fixer.py /path/to/your/song.mp3
+
+# 列出音频文件元数据（查看当前状态）
+python audio_meta_fixer.py /path/to/your/music --list
+python audio_meta_fixer.py /path/to/your/song.flac --list
 
 # 测试模式预览（安全）
 python audio_meta_fixer.py /path/to/your/music --dry-run
@@ -42,23 +49,64 @@ python audio_meta_fixer.py /path/to/your/music --dry-run
 
 ### 基本用法（交互模式）
 
-程序默认使用交互模式转换指定目录下的所有音频文件：
+程序默认使用交互模式，可以处理单个文件或整个目录：
+
+**处理整个目录（包括子目录）：**
 ```bash
 python audio_meta_fixer.py /path/to/music/directory
 ```
 
+**处理单个音频文件：**
+```bash
+python audio_meta_fixer.py /path/to/audio/file.mp3
+```
+
+### 列出元数据
+
+使用 `--list` 参数可以列出音频文件的元数据信息，不进行任何转换：
+
+**列出目录下所有文件的元数据：**
+```bash
+python audio_meta_fixer.py /path/to/music/directory --list
+```
+
+**列出单个文件的元数据：**
+```bash
+python audio_meta_fixer.py /path/to/audio/file.flac --list
+```
+
+这个功能可以帮助你：
+- 查看音频文件的所有元数据信息（标题、艺术家、专辑等）
+- 检查元数据是否存在编码问题
+- 了解音频文件的技术信息（时长、比特率、采样率、声道数）
+- 在转换前先了解文件的当前状态
+
 ### 测试模式
 
 使用 `--dry-run` 参数可以预览将要进行的转换，而不实际修改文件：
+
+**测试目录处理：**
 ```bash
 python audio_meta_fixer.py /path/to/music/directory --dry-run
+```
+
+**测试单个文件处理：**
+```bash
+python audio_meta_fixer.py /path/to/audio/file.mp3 --dry-run
 ```
 
 ### 直接模式（自动转换）
 
 使用 `--direct` 参数可以启用直接模式，程序会自动处理所有转换而不询问用户：
+
+**直接模式处理目录：**
 ```bash
 python audio_meta_fixer.py /path/to/music/directory --direct
+```
+
+**直接模式处理单个文件：**
+```bash
+python audio_meta_fixer.py /path/to/audio/file.mp3 --direct
 ```
 
 ### 交互模式特点（默认）
@@ -76,14 +124,32 @@ python audio_meta_fixer.py /path/to/music/directory --direct
 # 交互模式转换当前目录下的所有音频文件（默认）
 python audio_meta_fixer.py .
 
+# 交互模式转换单个音频文件
+python audio_meta_fixer.py ~/Music/song.mp3
+
+# 列出指定目录下所有音频文件的元数据
+python audio_meta_fixer.py ~/Music --list
+
+# 列出单个音频文件的元数据
+python audio_meta_fixer.py ~/Music/song.flac --list
+
 # 转换指定目录，测试模式（仍然是交互模式）
 python audio_meta_fixer.py ~/Music --dry-run
 
-# 直接模式转换，不询问用户确认
+# 转换单个文件，测试模式
+python audio_meta_fixer.py ~/Music/song.m4a --dry-run
+
+# 直接模式转换目录，不询问用户确认
 python audio_meta_fixer.py ~/Music --direct
 
-# 直接模式+测试模式
+# 直接模式转换单个文件
+python audio_meta_fixer.py ~/Music/song.ogg --direct
+
+# 直接模式+测试模式（目录）
 python audio_meta_fixer.py ~/Music --dry-run --direct
+
+# 直接模式+测试模式（单个文件）
+python audio_meta_fixer.py ~/Music/song.wav --dry-run --direct
 ```
 
 ## 转换的元数据字段

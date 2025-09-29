@@ -51,18 +51,18 @@ CHINESE_ENCODINGS = ['gbk', 'gb2312', 'gb18030', 'big5', 'big5hkscs', 'cp936', '
 
 class AudioMetadataConverter:
     """音频文件元数据编码转换器"""
-    
-    def __init__(self, target_dir: str, dry_run: bool = False, interactive: bool = False, list_only: bool = False):
+
+    def __init__(self, target_path: str, dry_run: bool = False, interactive: bool = False, list_only: bool = False):
         """
         初始化转换器
 
         Args:
-            target_dir: 目标目录路径
+            target_path: 目标路径（可以是目录或文件）
             dry_run: 是否为测试模式（不实际修改文件）
             interactive: 是否为交互模式（半自动转换）
             list_only: 是否只列出元数据（不进行转换）
         """
-        self.target_dir = Path(target_dir)
+        self.target_path = Path(target_path)
         self.dry_run = dry_run
         self.interactive = interactive
         self.list_only = list_only
@@ -238,28 +238,42 @@ class AudioMetadataConverter:
         
     def scan_audio_files(self) -> List[Path]:
         """
-        扫描目标目录下的所有音频文件
-        
+        扫描目标路径下的音频文件
+
         Returns:
             音频文件路径列表
         """
         audio_files = []
-        logger.info(f"扫描目录: {self.target_dir}")
-        
-        # 扫描所有文件，然后根据扩展名过滤（大小写不敏感）
-        for file_path in self.target_dir.rglob("*"):
-            if file_path.is_file() and file_path.suffix.lower() in AUDIO_EXTENSIONS:
-                audio_files.append(file_path)
-        
-        # 统计各扩展名的文件数量
-        ext_count = {}
-        for file_path in audio_files:
-            ext = file_path.suffix.lower()
-            ext_count[ext] = ext_count.get(ext, 0) + 1
-        
-        for ext, count in sorted(ext_count.items()):
-            logger.info(f"找到 {count} 个 {ext} 文件")
-        
+
+        # 判断是单个文件还是目录
+        if self.target_path.is_file():
+            # 单个文件模式
+            if self.target_path.suffix.lower() in AUDIO_EXTENSIONS:
+                logger.info(f"处理单个文件: {self.target_path}")
+                audio_files.append(self.target_path)
+            else:
+                logger.warning(f"不支持的文件格式: {self.target_path.suffix}")
+        elif self.target_path.is_dir():
+            # 目录模式
+            logger.info(f"扫描目录: {self.target_path}")
+
+            # 扫描所有文件，然后根据扩展名过滤（大小写不敏感）
+            for file_path in self.target_path.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in AUDIO_EXTENSIONS:
+                    audio_files.append(file_path)
+
+            # 统计各扩展名的文件数量
+            ext_count = {}
+            for file_path in audio_files:
+                ext = file_path.suffix.lower()
+                ext_count[ext] = ext_count.get(ext, 0) + 1
+
+            for ext, count in sorted(ext_count.items()):
+                logger.info(f"找到 {count} 个 {ext} 文件")
+        else:
+            logger.error(f"路径不存在: {self.target_path}")
+            return []
+
         logger.info(f"共找到 {len(audio_files)} 个音频文件")
         return audio_files
     
@@ -1744,10 +1758,12 @@ class AudioMetadataConverter:
 
         if self.list_only:
             logger.info(f"列出音频文件元数据")
-            logger.info(f"目标目录: {self.target_dir}")
+            path_type = "文件" if self.target_path.is_file() else "目录"
+            logger.info(f"目标{path_type}: {self.target_path}")
         else:
             logger.info(f"开始转换音频文件元数据编码")
-            logger.info(f"目标目录: {self.target_dir}")
+            path_type = "文件" if self.target_path.is_file() else "目录"
+            logger.info(f"目标{path_type}: {self.target_path}")
             mode_info = []
             if self.dry_run:
                 mode_info.append("测试模式（不修改文件）")
@@ -1773,7 +1789,12 @@ class AudioMetadataConverter:
             logger.info("\n" + "=" * 60)
             for file_path in audio_files:
                 self.processed_count += 1
-                logger.info(f"\n[{self.processed_count}/{self.total_files}] {file_path.relative_to(self.target_dir)}")
+                # 如果是单个文件，显示文件名；如果是目录，显示相对路径
+                if self.target_path.is_file():
+                    display_path = file_path.name
+                else:
+                    display_path = file_path.relative_to(self.target_path)
+                logger.info(f"\n[{self.processed_count}/{self.total_files}] {display_path}")
                 logger.info("-" * 60)
 
                 metadata = self.list_metadata(file_path)
@@ -1827,7 +1848,9 @@ def main():
         epilog="""
 示例:
   audio_meta_fixer.py /path/to/music                    # 交互模式转换指定目录下的所有音频文件（默认）
+  audio_meta_fixer.py /path/to/song.mp3                 # 交互模式转换单个音频文件
   audio_meta_fixer.py /path/to/music --list             # 列出指定目录下所有音频文件的元数据
+  audio_meta_fixer.py /path/to/song.flac --list         # 列出单个音频文件的元数据
   audio_meta_fixer.py /path/to/music --dry-run          # 测试模式，只显示将要转换的内容
   audio_meta_fixer.py /path/to/music --direct           # 直接模式，自动处理所有转换不询问用户
   audio_meta_fixer.py .                                 # 交互模式转换当前目录下的所有音频文件
@@ -1835,10 +1858,10 @@ def main():
 Author: Claude (Anthropic) | Version: 1.0.0 | License: MIT
         """
     )
-    
+
     parser.add_argument(
-        'directory',
-        help='要处理的目录路径'
+        'path',
+        help='要处理的路径（目录或音频文件）'
     )
     
     parser.add_argument(
@@ -1866,21 +1889,28 @@ Author: Claude (Anthropic) | Version: 1.0.0 | License: MIT
     )
     
     args = parser.parse_args()
-    
-    # 验证目录
-    target_dir = Path(args.directory)
-    if not target_dir.exists():
-        logger.error(f"目录不存在: {target_dir}")
+
+    # 验证路径
+    target_path = Path(args.path)
+    if not target_path.exists():
+        logger.error(f"路径不存在: {target_path}")
         sys.exit(1)
-    
-    if not target_dir.is_dir():
-        logger.error(f"不是有效的目录: {target_dir}")
+
+    # 检查是文件还是目录
+    if target_path.is_file():
+        # 如果是文件，检查是否是支持的音频格式
+        if target_path.suffix.lower() not in AUDIO_EXTENSIONS:
+            logger.error(f"不支持的文件格式: {target_path.suffix}")
+            logger.error(f"支持的格式: {', '.join(sorted(AUDIO_EXTENSIONS))}")
+            sys.exit(1)
+    elif not target_path.is_dir():
+        logger.error(f"路径既不是有效的文件也不是目录: {target_path}")
         sys.exit(1)
-    
+
     # 创建转换器并运行
     # 默认交互模式，除非使用--direct参数
     interactive = not args.direct and not args.list  # 列出模式时不需要交互
-    converter = AudioMetadataConverter(args.directory, args.dry_run, interactive, args.list)
+    converter = AudioMetadataConverter(args.path, args.dry_run, interactive, args.list)
     
     try:
         converter.run()
