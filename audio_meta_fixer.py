@@ -52,18 +52,20 @@ CHINESE_ENCODINGS = ['gbk', 'gb2312', 'gb18030', 'big5', 'big5hkscs', 'cp936', '
 class AudioMetadataConverter:
     """音频文件元数据编码转换器"""
     
-    def __init__(self, target_dir: str, dry_run: bool = False, interactive: bool = False):
+    def __init__(self, target_dir: str, dry_run: bool = False, interactive: bool = False, list_only: bool = False):
         """
         初始化转换器
-        
+
         Args:
             target_dir: 目标目录路径
             dry_run: 是否为测试模式（不实际修改文件）
             interactive: 是否为交互模式（半自动转换）
+            list_only: 是否只列出元数据（不进行转换）
         """
         self.target_dir = Path(target_dir)
         self.dry_run = dry_run
         self.interactive = interactive
+        self.list_only = list_only
         self.processed_count = 0
         self.converted_count = 0
         self.error_count = 0
@@ -71,7 +73,7 @@ class AudioMetadataConverter:
         self.current_progress = ""
         self.confirmed_conversions: Dict[str, str] = {}  # 已确认的转换映射
         self.conversion_log_file = Path("confirmed_conversions.json")
-        
+
         # 加载已确认的转换记录
         self.load_confirmed_conversions()
     
@@ -660,9 +662,50 @@ class AudioMetadataConverter:
                     '\uff00' <= char <= '\uffef'     # 全角ASCII、全角标点
                     for char in text
                 )
-                
+
                 if has_cjk_chars:
-                    # 包含正常的CJK字符，可能已经是UTF-8
+                    # 即使包含CJK字符，也要检查是否同时包含可疑的西欧字符（可能是部分乱码）
+                    suspicious_western = set('ÕÅÓÉúÌØ')  # 常见的中文乱码字符
+                    has_suspicious = any(c in suspicious_western for c in text)
+
+                    if has_suspicious:
+                        # 可能是部分乱码的情况，如 "ÕÅÓêÉú / 张雨生"
+                        # 尝试转换可疑部分
+                        parts = text.split(' / ')
+                        if len(parts) > 1:
+                            # 对每部分单独检查
+                            converted_parts = []
+                            did_convert = False
+                            for part in parts:
+                                # 检查这部分是否可能是乱码
+                                part_non_ascii = {c for c in part if ord(c) > 127}
+                                part_has_cjk = any('\u4e00' <= c <= '\u9fff' for c in part)
+
+                                if not part_has_cjk and part_non_ascii:
+                                    # 这部分没有中文但有非ASCII字符，可能是乱码
+                                    try:
+                                        bytes_text = part.encode('latin-1', errors='ignore')
+                                        test_converted = bytes_text.decode('gbk', errors='ignore')
+                                        if any('\u4e00' <= c <= '\u9fff' for c in test_converted):
+                                            # 转换后有中文，使用转换结果
+                                            converted_parts.append(test_converted)
+                                            did_convert = True
+                                        else:
+                                            converted_parts.append(part)
+                                    except:
+                                        converted_parts.append(part)
+                                else:
+                                    converted_parts.append(part)
+
+                            if did_convert:
+                                converted_text = ' / '.join(converted_parts)
+                                if self.interactive:
+                                    final_text, should_convert = self.confirm_conversion(text, converted_text, field, file_path, self.current_progress)
+                                    return final_text, should_convert
+                                else:
+                                    return converted_text, True
+
+                    # 没有可疑字符，认为已经是正确的UTF-8
                     text.encode('utf-8')
                     return text, False
             except UnicodeEncodeError:
@@ -926,13 +969,48 @@ class AudioMetadataConverter:
                     ]):
                         return text, False  # 看起来是正常的法语，不转换
                 
-                # 如果非ASCII字符都是常见的西欧字符且没有明显的乱码模式，不转换
+                # 如果非ASCII字符都是常见的西欧字符，需要检查是否实际上是中文乱码
                 if non_ascii_chars.issubset(common_western_chars):
+                    # 尝试转换看是否能得到有意义的中文
+                    possible_chinese = False
+                    test_result = None
+
+                    # 尝试Latin-1 -> GBK转换（最常见的情况）
+                    try:
+                        bytes_text = text.encode('latin-1', errors='ignore')
+                        test_converted = bytes_text.decode('gbk', errors='ignore')
+                        # 检查转换后是否包含中文字符
+                        if any('\u4e00' <= c <= '\u9fff' for c in test_converted):
+                            possible_chinese = True
+                            test_result = test_converted
+                    except:
+                        pass
+
+                    # 如果没找到，尝试其他编码组合
+                    if not possible_chinese:
+                        for source_enc in ['latin-1', 'cp1252']:
+                            for target_enc in ['gb2312', 'big5']:
+                                try:
+                                    bytes_text = text.encode(source_enc, errors='ignore')
+                                    test_converted = bytes_text.decode(target_enc, errors='ignore')
+                                    if any('\u4e00' <= c <= '\u9fff' for c in test_converted):
+                                        possible_chinese = True
+                                        test_result = test_converted
+                                        break
+                                except:
+                                    continue
+                            if possible_chinese:
+                                break
+
+                    # 如果转换后得到有意义的中文，继续处理
+                    if possible_chinese:
+                        pass  # 继续下面的转换逻辑，让正常的转换流程处理
                     # 额外检查：如果是短文本且字符组合看起来不像正常单词，可能是乱码
-                    if len(text) <= 6 and not any(c.isspace() for c in text):
+                    elif len(text) <= 6 and not any(c.isspace() for c in text):
                         # 短文本且无空格，可能是乱码，尝试转换
                         pass  # 继续下面的转换逻辑
                     else:
+                        # 真的是西欧语言文本，不需要转换
                         return text, False
             
             # 对于其他情况，尝试转换
@@ -1524,59 +1602,221 @@ class AudioMetadataConverter:
             logger.error(f"处理文件失败 {file_path}: {e}")
             return False
     
+    def list_metadata(self, file_path: Path) -> dict:
+        """列出音频文件的元数据
+
+        Args:
+            file_path: 音频文件路径
+
+        Returns:
+            元数据字典
+        """
+        metadata = {}
+        ext = file_path.suffix.lower()
+
+        try:
+            if ext == '.mp3':
+                try:
+                    audio = ID3(file_path)
+                    # 提取常见的ID3标签
+                    tag_mapping = {
+                        'TIT2': '标题',
+                        'TPE1': '艺术家',
+                        'TALB': '专辑',
+                        'TPE2': '专辑艺术家',
+                        'TCON': '流派',
+                        'TYER': '年份',
+                        'TRCK': '音轨',
+                    }
+                    for frame_id, name in tag_mapping.items():
+                        if frame_id in audio:
+                            frame = audio[frame_id]
+                            if frame.text:
+                                metadata[name] = str(frame.text[0])
+                    # 处理注释
+                    comments = []
+                    for frame in audio.getall('COMM'):
+                        if frame.text:
+                            for text in frame.text:
+                                comments.append(str(text))
+                    if comments:
+                        metadata['注释'] = '; '.join(comments)
+                except ID3NoHeaderError:
+                    pass
+
+            elif ext == '.flac':
+                audio = FLAC(file_path)
+                tag_mapping = {
+                    'title': '标题',
+                    'artist': '艺术家',
+                    'album': '专辑',
+                    'albumartist': '专辑艺术家',
+                    'genre': '流派',
+                    'date': '日期',
+                    'tracknumber': '音轨号',
+                    'comment': '注释'
+                }
+                for tag, name in tag_mapping.items():
+                    if tag in audio:
+                        values = audio[tag]
+                        if values:
+                            metadata[name] = '; '.join(values)
+
+            elif ext in ['.m4a', '.mp4']:
+                audio = MP4(file_path)
+                tag_mapping = {
+                    '\xa9nam': '标题',
+                    '\xa9ART': '艺术家',
+                    '\xa9alb': '专辑',
+                    '\xa9cmt': '注释',
+                    '\xa9gen': '流派',
+                    '\xa9day': '年份',
+                    '\xa9wrt': '作曲家',
+                    'aART': '专辑艺术家',
+                }
+                for tag, name in tag_mapping.items():
+                    if tag in audio:
+                        values = audio[tag]
+                        if values:
+                            metadata[name] = '; '.join(str(v) for v in values if not isinstance(v, tuple))
+                # 处理音轨号
+                if 'trkn' in audio:
+                    trkn = audio['trkn'][0]
+                    if isinstance(trkn, tuple):
+                        metadata['音轨号'] = f"{trkn[0]}/{trkn[1]}" if len(trkn) > 1 else str(trkn[0])
+
+            elif ext == '.wav':
+                # 尝试读取WAV INFO标签
+                info_tags = self.parse_wav_info_tags(file_path)
+                if info_tags:
+                    metadata.update(info_tags)
+                # 也尝试用mutagen读取ID3标签（某些WAV文件可能有）
+                audio = File(file_path)
+                if audio and hasattr(audio, 'tags') and audio.tags:
+                    for key, value in audio.tags.items():
+                        if isinstance(value, str):
+                            metadata[str(key)] = value
+                        elif hasattr(value, 'text'):
+                            metadata[str(key)] = '; '.join(str(t) for t in value.text)
+
+            else:
+                # 使用通用方法
+                audio = File(file_path)
+                if audio and hasattr(audio, 'tags') and audio.tags:
+                    for key, value in audio.tags.items():
+                        if isinstance(value, str):
+                            metadata[str(key)] = value
+                        elif hasattr(value, 'text'):
+                            metadata[str(key)] = '; '.join(str(t) for t in value.text)
+                        elif isinstance(value, list):
+                            metadata[str(key)] = '; '.join(str(v) for v in value)
+
+            # 添加文件信息 - 需要重新读取文件以获取info
+            try:
+                audio_with_info = File(file_path)
+                if audio_with_info and hasattr(audio_with_info, 'info'):
+                    info = audio_with_info.info
+                    if hasattr(info, 'length'):
+                        length = info.length
+                        minutes = int(length // 60)
+                        seconds = int(length % 60)
+                        metadata['时长'] = f"{minutes}:{seconds:02d}"
+                    if hasattr(info, 'bitrate'):
+                        metadata['比特率'] = f"{info.bitrate} bps"
+                    if hasattr(info, 'sample_rate'):
+                        metadata['采样率'] = f"{info.sample_rate} Hz"
+                    if hasattr(info, 'channels'):
+                        metadata['声道数'] = str(info.channels)
+            except:
+                pass  # 忽略获取音频信息的错误
+
+        except Exception as e:
+            metadata['错误'] = str(e)
+
+        return metadata
+
     def run(self):
         """运行转换过程"""
         logger.info("=" * 60)
         logger.info(f"Audio Meta Fixer v{__version__}")
         logger.info(f"作者: {__author__} | 许可证: {__license__}")
         logger.info("-" * 60)
-        logger.info(f"开始转换音频文件元数据编码")
-        logger.info(f"目标目录: {self.target_dir}")
-        mode_info = []
-        if self.dry_run:
-            mode_info.append("测试模式（不修改文件）")
-        if self.interactive:
-            mode_info.append("交互模式")
-        if not mode_info:
-            mode_info.append("正常模式")
-        logger.info(f"模式: {' + '.join(mode_info)}")
+
+        if self.list_only:
+            logger.info(f"列出音频文件元数据")
+            logger.info(f"目标目录: {self.target_dir}")
+        else:
+            logger.info(f"开始转换音频文件元数据编码")
+            logger.info(f"目标目录: {self.target_dir}")
+            mode_info = []
+            if self.dry_run:
+                mode_info.append("测试模式（不修改文件）")
+            if self.interactive:
+                mode_info.append("交互模式")
+            if not mode_info:
+                mode_info.append("正常模式")
+            logger.info(f"模式: {' + '.join(mode_info)}")
         logger.info("=" * 60)
         
         # 扫描音频文件
         audio_files = self.scan_audio_files()
-        
+
         if not audio_files:
             logger.info("未找到音频文件")
             return
-        
+
         self.total_files = len(audio_files)
         logger.info(f"找到 {self.total_files} 个音频文件")
-        
-        # 处理每个文件
-        for file_path in audio_files:
-            try:
+
+        if self.list_only:
+            # 列出元数据模式
+            logger.info("\n" + "=" * 60)
+            for file_path in audio_files:
                 self.processed_count += 1
-                
-                # 设置当前进度信息
-                self.current_progress = f"[{self.processed_count}/{self.total_files}] 处理文件: {file_path}"
-                
-                # 在交互模式下显示进度
-                if self.interactive:
-                    print(f"\n{self.current_progress}")
-                
-                if self.process_audio_file(file_path):
-                    self.converted_count += 1
-            except Exception as e:
-                logger.error(f"处理文件时出错 {file_path}: {e}")
-                self.error_count += 1
-        
-        # 输出统计信息
-        logger.info("=" * 60)
-        logger.info("转换完成！")
-        logger.info(f"处理文件数: {self.processed_count}")
-        logger.info(f"转换文件数: {self.converted_count}")
-        logger.info(f"错误文件数: {self.error_count}")
-        logger.info("=" * 60)
+                logger.info(f"\n[{self.processed_count}/{self.total_files}] {file_path.relative_to(self.target_dir)}")
+                logger.info("-" * 60)
+
+                metadata = self.list_metadata(file_path)
+
+                if metadata:
+                    # 计算最长的键名长度用于对齐
+                    max_key_length = max(len(key) for key in metadata.keys()) if metadata else 0
+
+                    for key, value in metadata.items():
+                        # 格式化输出，键名右对齐
+                        logger.info(f"  {key:>{max_key_length}}: {value}")
+                else:
+                    logger.info("  (无元数据)")
+
+            logger.info("\n" + "=" * 60)
+            logger.info(f"列出完成！共 {self.processed_count} 个文件")
+            logger.info("=" * 60)
+        else:
+            # 转换模式
+            for file_path in audio_files:
+                try:
+                    self.processed_count += 1
+
+                    # 设置当前进度信息
+                    self.current_progress = f"[{self.processed_count}/{self.total_files}] 处理文件: {file_path}"
+
+                    # 在交互模式下显示进度
+                    if self.interactive:
+                        print(f"\n{self.current_progress}")
+
+                    if self.process_audio_file(file_path):
+                        self.converted_count += 1
+                except Exception as e:
+                    logger.error(f"处理文件时出错 {file_path}: {e}")
+                    self.error_count += 1
+
+            # 输出统计信息
+            logger.info("=" * 60)
+            logger.info("转换完成！")
+            logger.info(f"处理文件数: {self.processed_count}")
+            logger.info(f"转换文件数: {self.converted_count}")
+            logger.info(f"错误文件数: {self.error_count}")
+            logger.info("=" * 60)
 
 
 def main():
@@ -1587,6 +1827,7 @@ def main():
         epilog="""
 示例:
   audio_meta_fixer.py /path/to/music                    # 交互模式转换指定目录下的所有音频文件（默认）
+  audio_meta_fixer.py /path/to/music --list             # 列出指定目录下所有音频文件的元数据
   audio_meta_fixer.py /path/to/music --dry-run          # 测试模式，只显示将要转换的内容
   audio_meta_fixer.py /path/to/music --direct           # 直接模式，自动处理所有转换不询问用户
   audio_meta_fixer.py .                                 # 交互模式转换当前目录下的所有音频文件
@@ -1601,11 +1842,17 @@ Author: Claude (Anthropic) | Version: 1.0.0 | License: MIT
     )
     
     parser.add_argument(
+        '--list',
+        action='store_true',
+        help='列出目录下所有音频文件的元数据信息'
+    )
+
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='测试模式，不实际修改文件，只显示将要进行的转换'
     )
-    
+
     parser.add_argument(
         '--direct',
         action='store_true',
@@ -1632,8 +1879,8 @@ Author: Claude (Anthropic) | Version: 1.0.0 | License: MIT
     
     # 创建转换器并运行
     # 默认交互模式，除非使用--direct参数
-    interactive = not args.direct
-    converter = AudioMetadataConverter(args.directory, args.dry_run, interactive)
+    interactive = not args.direct and not args.list  # 列出模式时不需要交互
+    converter = AudioMetadataConverter(args.directory, args.dry_run, interactive, args.list)
     
     try:
         converter.run()
